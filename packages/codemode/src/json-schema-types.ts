@@ -14,6 +14,41 @@ export interface ConversionContext {
   maxDepth: number;
 }
 
+const CONSTRAINT_KEYWORDS = [
+  "minimum",
+  "maximum",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+  "multipleOf",
+  "pattern",
+  "minLength",
+  "maxLength",
+  "minItems",
+  "maxItems",
+  "uniqueItems",
+  "minProperties",
+  "maxProperties"
+] as const;
+
+/** Keep field constraints that TypeScript cannot express visible to the model. */
+function constraintTags(schema: JSONSchema7): string[] {
+  const tags: string[] = [];
+  if (schema.type === "integer") tags.push("@integer");
+
+  for (const keyword of CONSTRAINT_KEYWORDS) {
+    const value = schema[keyword];
+    if (value !== undefined) {
+      // JSON strings keep patterns (including newlines) intact on one line.
+      const text = (JSON.stringify(value) ?? String(value))
+        .replace(/\u2028/g, "\\u2028")
+        .replace(/\u2029/g, "\\u2029");
+      tags.push(`@${keyword} ${escapeJsDoc(text)}`);
+    }
+  }
+
+  return tags;
+}
+
 /**
  * Resolve an internal JSON Pointer $ref (e.g. #/definitions/Foo) against the root schema.
  * Returns null for external URLs or unresolvable paths.
@@ -203,23 +238,20 @@ export function jsonSchemaToTypeString(
         );
         const desc = propSchema.description;
         const format = propSchema.format;
+        const jsdocLines: string[] = [];
 
-        if (desc || format) {
-          const descText = desc
-            ? escapeJsDoc(desc.replace(/\r?\n/g, " "))
-            : undefined;
-          const formatTag = format
-            ? `@format ${escapeJsDoc(format)}`
-            : undefined;
+        if (desc) jsdocLines.push(escapeJsDoc(desc.replace(/\r?\n/g, " ")));
+        if (format) jsdocLines.push(`@format ${escapeJsDoc(format)}`);
+        jsdocLines.push(...constraintTags(propSchema));
 
-          if (descText && formatTag) {
-            lines.push(`${indent}    /**`);
-            lines.push(`${indent}     * ${descText}`);
-            lines.push(`${indent}     * ${formatTag}`);
-            lines.push(`${indent}     */`);
-          } else {
-            lines.push(`${indent}    /** ${descText ?? formatTag} */`);
+        if (jsdocLines.length === 1) {
+          lines.push(`${indent}    /** ${jsdocLines[0]} */`);
+        } else if (jsdocLines.length > 1) {
+          lines.push(`${indent}    /**`);
+          for (const line of jsdocLines) {
+            lines.push(`${indent}     * ${line}`);
           }
+          lines.push(`${indent}     */`);
         }
 
         const quotedName = quoteProp(propName);

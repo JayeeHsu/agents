@@ -338,6 +338,45 @@ describe("descriptions and JSDoc", () => {
 
     expect(result).toContain("/** @format uuid */");
   });
+
+  testBoth(
+    "preserves validation constraints in generated tool descriptions",
+    "search",
+    {
+      json: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Search query",
+            minLength: 1,
+            maxLength: 100,
+            pattern: "^[a-z]+$"
+          },
+          limit: { type: "number", minimum: 0, maximum: 10 }
+        },
+        required: ["query", "limit"]
+      },
+      zod: z.object({
+        query: z
+          .string()
+          .min(1)
+          .max(100)
+          .regex(/^[a-z]+$/)
+          .describe("Search query"),
+        limit: z.number().min(0).max(10)
+      })
+    },
+    (result) => {
+      expect(result).toContain("* Search query");
+      expect(result).toContain('* @pattern "^[a-z]+$"');
+      expect(result).toContain("* @minLength 1");
+      expect(result).toContain("* @maxLength 100");
+      expect(result).toContain("* @minimum 0");
+      expect(result).toContain("* @maximum 10");
+      expect(result).toContain("@param input.query - Search query");
+    }
+  );
 });
 
 // ---------------------------------------------------------------------------

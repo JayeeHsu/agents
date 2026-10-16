@@ -696,6 +696,20 @@ const types = generateTypesFromJsonSchema({
 // declare const codemode: { getWeather: (input: GetWeatherInput) => Promise<...>; }
 ```
 
+Field JSDoc includes constraints that TypeScript types cannot express: integer semantics, numeric bounds and multiples, string patterns and lengths, array sizes and uniqueness, and object property counts. For example, a required property with `{ type: "integer", minimum: 1 }` produces:
+
+```ts
+type ExampleInput = {
+  /**
+   * @integer
+   * @minimum 1
+   */
+  count: number;
+};
+```
+
+These annotations cover constraints directly on object properties, including nested properties. They do not preserve every JSON Schema validation rule, such as constraints inside references or union branches. Pattern annotations use JSON string syntax to preserve escapes. JSDoc informs the model; it does not replace runtime validation.
+
 ### `generateTypes(tools)` (AI SDK)
 
 Generates TypeScript type definitions from AI SDK tools or Zod-based tool descriptors. Requires `ai` and `zod` peer dependencies.

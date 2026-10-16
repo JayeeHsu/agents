@@ -124,6 +124,175 @@ describe("jsonSchemaToType", () => {
       "type EmptyInput = Record<string, unknown>"
     );
   });
+
+  it("preserves numeric constraints that TypeScript cannot express", () => {
+    const result = jsonSchemaToType(
+      {
+        type: "object",
+        properties: {
+          count: {
+            type: "integer",
+            description: "Number of items",
+            minimum: 0,
+            maximum: 10,
+            exclusiveMinimum: 0,
+            exclusiveMaximum: 10,
+            multipleOf: 2
+          }
+        },
+        required: ["count"]
+      },
+      "Input"
+    );
+
+    expect(result).toBe(
+      [
+        "type Input = {",
+        "    /**",
+        "     * Number of items",
+        "     * @integer",
+        "     * @minimum 0",
+        "     * @maximum 10",
+        "     * @exclusiveMinimum 0",
+        "     * @exclusiveMaximum 10",
+        "     * @multipleOf 2",
+        "     */",
+        "    count: number;",
+        "}"
+      ].join("\n")
+    );
+  });
+
+  it("preserves string constraints alongside format in nested properties", () => {
+    const result = jsonSchemaToType(
+      {
+        type: "object",
+        properties: {
+          user: {
+            type: "object",
+            properties: {
+              code: {
+                type: "string",
+                format: "custom-code",
+                pattern: "^[A-Z]+$",
+                minLength: 0,
+                maxLength: 8
+              }
+            },
+            required: ["code"]
+          }
+        },
+        required: ["user"]
+      },
+      "Input"
+    );
+
+    expect(result).toContain(
+      [
+        "        /**",
+        "         * @format custom-code",
+        '         * @pattern "^[A-Z]+$"',
+        "         * @minLength 0",
+        "         * @maxLength 8",
+        "         */",
+        "        code: string;"
+      ].join("\n")
+    );
+  });
+
+  it.each([true, false])(
+    "preserves array constraints including uniqueItems: %s",
+    (uniqueItems) => {
+      const result = jsonSchemaToType(
+        {
+          type: "object",
+          properties: {
+            tags: {
+              type: "array",
+              items: { type: "string" },
+              minItems: 0,
+              maxItems: 5,
+              uniqueItems
+            }
+          },
+          required: ["tags"]
+        },
+        "Input"
+      );
+
+      expect(result).toContain(
+        [
+          "    /**",
+          "     * @minItems 0",
+          "     * @maxItems 5",
+          `     * @uniqueItems ${uniqueItems}`,
+          "     */",
+          "    tags: string[];"
+        ].join("\n")
+      );
+    }
+  );
+
+  it("preserves object property count constraints", () => {
+    const result = jsonSchemaToType(
+      {
+        type: "object",
+        properties: {
+          metadata: {
+            type: "object",
+            additionalProperties: { type: "string" },
+            minProperties: 0,
+            maxProperties: 5
+          }
+        }
+      },
+      "Input"
+    );
+
+    expect(result).toContain(
+      [
+        "    /**",
+        "     * @minProperties 0",
+        "     * @maxProperties 5",
+        "     */",
+        "    metadata?: {",
+        "        [key: string]: string;"
+      ].join("\n")
+    );
+  });
+
+  it("escapes comment terminators and preserves newlines in patterns", () => {
+    const result = jsonSchemaToType(
+      {
+        type: "object",
+        properties: {
+          text: { type: "string", pattern: "a*/b\r\nc\u2028d\u2029e" }
+        }
+      },
+      "Input"
+    );
+
+    expect(result).toContain('/** @pattern "a*\\/b\\r\\nc\\u2028d\\u2029e" */');
+    expect(result).not.toContain("a*/b");
+    expect(result).not.toContain("b\r\nc");
+    expect(result).not.toContain("\u2028");
+    expect(result).not.toContain("\u2029");
+  });
+
+  it("does not apply an integer constraint to mixed type unions", () => {
+    const result = jsonSchemaToType(
+      {
+        type: "object",
+        properties: {
+          value: { type: ["integer", "string"] },
+          amount: { type: ["integer", "number"] }
+        }
+      },
+      "Input"
+    );
+
+    expect(result).not.toContain("@integer");
+  });
 });
 
 // ---------------------------------------------------------------------------
